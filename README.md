@@ -43,3 +43,5 @@ There is a very basic .afpalette reader in the code that does nothing other than
 I am not affiliated with either Adobe or Affinity. This is a personal project that I am providing to the community and therefore take no responsibility for lost work due to crashes or malfunctions caused by the files this tool generates.
 
 All trademarks and brand names are the property of their respective owners.
+
+This project is provided under the MIT licence.
