@@ -75,8 +75,6 @@ function hexToBytes(s) {
 
 function writeAffinityPalette(paletteData) {
 
-    console.log(paletteData);
-
     const buffers = [];
     const replaceWithFileSizeBuffers = [];
     const replaceWithFileSizeMinusFooterBuffers = [];
