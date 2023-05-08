@@ -19,6 +19,9 @@ grdReader.onload = function (e) {
     const c_Mdpn = 0x4D64706E;
     const c_Grdn = 0x4772646E;
     const c_Nm   = 0x4E6D2020;
+    const c_Trns = 0x54726E73;
+    const c_TrnS = 0x54726E53;
+    const c_Opct = 0x4F706374;
 
     var filename = grdFileInput.files[0].name;
     const fileExtensionIndex = filename.lastIndexOf(".");
@@ -115,10 +118,56 @@ grdReader.onload = function (e) {
                 }
             }
 
+            // Get the transparency stops
+
+            i = GRDSkipToChunk(dataView, i, c_Trns); i += 4; // Skip VILs
+            const transparencyCount = dataView.getUint32(i, false);
+
+            console.log("    Found Trns with " + transparencyCount + " stops");
+
+            const transparencyStops = [];
+
+            for(let j=0; j < transparencyCount; j++) {
+                i = GRDSkipToChunk(dataView, i, c_TrnS);
+                i = GRDSkipToChunk(dataView, i, c_Opct); i += 8; // Skip 'UntF' and '#Prc'
+                const opacity = dataView.getFloat64(i, false) * 0.01;
+                i = GRDSkipToChunk(dataView, i, c_Lctn); i += 4;
+                const location = dataView.getUint32(i, false) * (1/4096.0);
+                i = GRDSkipToChunk(dataView, i, c_Mdpn); i += 4;
+                const midpoint = dataView.getUint32(i, false) * 0.01;
+
+                console.log(        "Opacity:" + opacity + " L:" + location + " M:" + midpoint);
+                transparencyStops.push({Opacity:opacity, Position:location, Midpoint:midpoint });
+            }
+
+            // We only import the transparency if it exactly matches the colour track.
+            if(transparencyCount == colourCount) {
+                let allStopsMatch = true;
+                for(let j=0; j < transparencyCount; j++) {
+                    if(transparencyStops[j].Position != palette.Colours[j].Position ||
+                       transparencyStops[j].Midpoint != palette.Colours[j].Midpoint) {
+                        allStopsMatch = false;
+                        console.log("    Transparency not supported. Colour locations and midpoints dno't match transparency stops.");
+                        break;
+                    }
+                }
+
+                if(allStopsMatch) {
+                    console.log("    Transparency supported.");
+                    for(let j=0; j < transparencyCount; j++) {
+                        palette.Colours[j].Alpha = transparencyStops[j].Opacity;
+                    }
+                }
+            } else {
+                console.log("    Transparency not supported. Colour count does not match transparency stop count.");
+            }
+
             // DEBUG - limit the amount of palettes to export
             //if(palettes.Palettes.length == 1)
             //    break;
         }
+
+        console.log("Found " + palettes.Palettes.length + " palettes");
     }
 
     previewPalette(palettes);
