@@ -85,6 +85,10 @@ grdReader.onload = function (e) {
 
             palettes.Palettes.push(palette);
 
+            const colourTrack = [];
+            const transparencyTrack = [];
+            const positionsTrack = [];
+
             i = GRDSkipToChunk(dataView, i, c_Clrs); i += 4; // Skip VILs
 
             colourCount = dataView.getUint32(i, false);
@@ -92,6 +96,11 @@ grdReader.onload = function (e) {
 
             for(let j=0; j < colourCount; j++) {
                 i = GRDSkipToChunk(dataView, i, c_Rd); i += 4; // Skip type
+
+                if (i >= dataView.byteLength) {
+                    showError("Sorry, I only support converting RGB gradients.");
+                }
+
                 const red = dataView.getFloat64(i, false) / 255.0;
                 i = GRDSkipToChunk(dataView, i, c_Grn); i += 4; // Skip type
                 const green = dataView.getFloat64(i, false) / 255.0;
@@ -105,16 +114,20 @@ grdReader.onload = function (e) {
                 // Make sure we have an entry at location 0
                 if(j == 0 && location != 0) {
                     // Duplicate first entry
-                    palette.Colours.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:0, Midpoint:0.5 });
+                    colourTrack.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:0, Midpoint:midpoint });
+                    positionsTrack.push({Position:0, Midpoint:midpoint});
                 }
 
                 console.log(        "R:" + red + " G:" + green + " B:" + blue + " L:" + location + " M:" + midpoint);
-                palette.Colours.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:location, Midpoint:midpoint });
+
+                colourTrack.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:location, Midpoint:midpoint});
+                positionsTrack.push({Position:location, Midpoint:midpoint});
 
                 // Make sure we have an entry at 1 otherwise we'll crash Designer
                 if(j == colourCount-1 && location != 1) {
                     // Duplicate last entry
-                    palette.Colours.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:1, Midpoint:0.5 });
+                    colourTrack.push({Red:red, Green:green, Blue:blue, Alpha:1, Position:1, Midpoint:midpoint});
+                    positionsTrack.push({Position:1, Midpoint:midpoint});
                 }
             }
 
@@ -125,8 +138,6 @@ grdReader.onload = function (e) {
 
             console.log("    Found Trns with " + transparencyCount + " stops");
 
-            const transparencyStops = [];
-
             for(let j=0; j < transparencyCount; j++) {
                 i = GRDSkipToChunk(dataView, i, c_TrnS);
                 i = GRDSkipToChunk(dataView, i, c_Opct); i += 8; // Skip 'UntF' and '#Prc'
@@ -136,30 +147,45 @@ grdReader.onload = function (e) {
                 i = GRDSkipToChunk(dataView, i, c_Mdpn); i += 4;
                 const midpoint = dataView.getUint32(i, false) * 0.01;
 
+                // Make sure we have an entry at location 0
+                if(j == 0 && location != 0) {
+                    // Duplicate first entry
+                    transparencyTrack.push({Red:0, Green:0, Blue:0, Alpha:opacity, Position:0, Midpoint:midpoint});
+                    positionsTrack.push({Position:0, Midpoint:midpoint});
+                }
+
                 console.log(        "Opacity:" + opacity + " L:" + location + " M:" + midpoint);
-                transparencyStops.push({Opacity:opacity, Position:location, Midpoint:midpoint });
+
+                transparencyTrack.push({Red:0, Green:0, Blue:0, Alpha:opacity, Position:location, Midpoint:midpoint});
+                positionsTrack.push({Position:location, Midpoint:midpoint});
+
+                // Make sure we have an entry at 1 otherwise we'll crash Designer
+                if(j == transparencyCount-1 && location != 1) {
+                    // Duplicate last entry
+                    transparencyTrack.push({Red:0, Green:0, Blue:0, Alpha:opacity, Position:1, Midpoint:midpoint});
+                    positionsTrack.push({Position:1, Midpoint:midpoint});
+                }
             }
 
-            // We only import the transparency if it exactly matches the colour track.
-            if(transparencyCount == colourCount) {
-                let allStopsMatch = true;
-                for(let j=0; j < transparencyCount; j++) {
-                    if(transparencyStops[j].Position != palette.Colours[j].Position ||
-                       transparencyStops[j].Midpoint != palette.Colours[j].Midpoint) {
-                        allStopsMatch = false;
-                        console.log("    Transparency not supported. Colour locations and midpoints dno't match transparency stops.");
-                        break;
-                    }
-                }
+            positionsTrack.sort(function(a, b){return a.Position - b.Position});
 
-                if(allStopsMatch) {
-                    console.log("    Transparency supported.");
-                    for(let j=0; j < transparencyCount; j++) {
-                        palette.Colours[j].Alpha = transparencyStops[j].Opacity;
-                    }
-                }
-            } else {
-                console.log("    Transparency not supported. Colour count does not match transparency stop count.");
+            let lastPosition = -1;
+
+            for(let i=0; i < positionsTrack.length; i++)
+            {
+                const t = positionsTrack[i].Position;
+                const midpoint = positionsTrack[i].Midpoint;
+
+                // Don't duplicate the stops if we have a colour and transparency stop at the same position
+                if(t == lastPosition)
+                    continue;
+
+                lastPosition = t;
+
+                const colour = gradientUtils.getColourFromGradient(colourTrack, t);
+                const transparency = gradientUtils.getColourFromGradient(transparencyTrack, t);
+
+                palette.Colours.push({Red:colour.Red, Green:colour.Green, Blue:colour.Blue, Alpha:transparency.Alpha, Position:t, Midpoint:midpoint });
             }
 
             // DEBUG - limit the amount of palettes to export
